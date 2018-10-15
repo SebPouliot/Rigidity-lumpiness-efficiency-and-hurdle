@@ -1,0 +1,368 @@
+---
+title: "Assignment 2"
+subtitle: "Econ 641"
+author: "Eseul Choi, Behzad Jeddi and Ganna Prykhodko"
+date: \today
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 6
+  html_document: default
+  word_document: default
+header-includes:
+    - \usepackage{booktabs}
+    - \usepackage[table, dvipsnames]{xcolor}
+    - \usepackage{longtable}
+    - \usepackage{dcolumn}
+    - \clubpenalty=10000 #The next 3 lines are to avoid widows and orphans
+    - \widowpenalty=10000
+    - \displaywidowpenalty=10000
+fontsize: 12pt
+geometry: margin=1in
+documentclass: article
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, include = TRUE, message = FALSE, warning = FALSE,  tidy = TRUE, tidy.opts=list(blank=FALSE, width.cutoff=40), collapse = TRUE)
+
+library(pacman)
+pacman::p_load(tidyverse) #For data manipulation
+pacman::p_load(xlsx, readxl) #To read and write excel files
+pacman::p_load(systemfit)
+pacman::p_load(Cairo) #For font compatibility when making plots
+pacman::p_load(magrittr)
+pacman::p_load(haven)
+pacman::p_load(viridis)
+options(kableExtra.latex.load_packages = FALSE)
+p_load(kableExtra) #To make nice tables
+p_load(stargazer) #To make nice regression tables
+```
+
+
+```{r data, include=FALSE }
+#Read data
+coltype <- rep("numeric", 14)
+
+dta = suppressWarnings(read_excel("C:/Users/Anya_Muranova/Desktop/Rawdata.xlsx", col_types = coltype))
+rm(coltype)
+
+# Save the data
+saveRDS(dta, file = "C:/Users/Anya_Muranova/Desktop/Assignment 2 data.RDS")
+
+# Road the data
+dta <- readRDS("C:/Users/Anya_Muranova/Desktop/Assignment 2 data.RDS")
+
+dta <- data.frame(dta) 
+```
+
+## Question 1
+
+In assignment 2 we reproduce some results from Larue, Singbo, and Pouliot (2017). The variables from the data that we are going to use are defined in the table below.
+
+Table: Definitions of variables
+
+| Name           | Definition                          |
+|:---------------|:------------------------------------|
+| labo($x_{2}$)  | Labor quantity (fte)                |
+| feed($x_{1}$)  | Value of feed input (\$)            |
+| machi($x_{4}$) | Value of machinery input (\$)       |
+| ocapi($x_{5}$) | Value of other capital (\$)         |
+| vout1($Y_{1}$) | Value of dairy output (\$)          |
+| otout1($Y_{2}$)| Value of other output (\$)          |
+| land($x_{3}$)  | Land area (HA)                      |
+| Age            | Age of operator                     |
+| north          | Dummy variable for north region     |
+| south          | Dummy variable for south region     |
+| offwork        | Dummy for operator working off farm |
+
+
+```{r table, echo=FALSE}
+
+vars<- dta [c( "labo","feed","machi","ocapi","vout1","otout1","Land","Age","North","South","offwork")]
+v_mean <- lapply(vars, mean, na.rm=TRUE)
+v_med <- lapply(vars, median, na.rm=TRUE)
+v_sd <- lapply(vars, sd, na.rm=TRUE)
+v_value<- c("Full time equivalent","$", "$", "$", "$", "$", "Ha", "Years", "Binary", "Binary", "Binary")
+
+
+v_mean <- round(as.numeric(v_mean), 2)
+v_med <- round(as.numeric(v_med), 2)
+v_sd <- round(as.numeric(v_sd), 2)
+v_tab <- cbind(Units= v_value, Mean=v_mean, P50=v_med, SD=v_sd)
+
+
+rownames(v_tab) <- c("Labor", "Feed", "Machinary","Other capital","Dairy output","Other output", "Land", "Age", "North","South","Off-farm work")
+kable(v_tab, format = "latex", caption = "Summary of selected variables (number of observations, N = 549) \\label{tab.summary}", booktabs = T) %>%
+  kable_styling(latex_options = "striped")
+
+```
+
+
+## Question 2
+At first, we need to transform variables for estimation following the below mentioned steps:
+
+  * Apply logs for the input and output variables.
+  
+  * Normalize those variables at (geometric) mean, because the numeric ranges differ across the variables. In addition, we have already applied $log$, which is also helpful in this case. For simplicity, we normalize the variables using the arithmetic mean of $log(variable)$.
+  
+  * Impose the linear homogeneity property of the input ditance function by dividing the variables by the land input. Hence, since our variables are taken in $log$, we need to substract $log$ of the land input from each of them.  
+
+Also, we create a dummy variable for $year \geq 2009$ (2009 and after) and an interaction term of the time trend and this dummy. These two terms are introduced in the model in order to capture the hypothesized trend that the technical inefficiency will jump in 2009 (when quota restrictions were introduced), and then decrease with time. 
+
+
+```{r , include=FALSE}
+#Take log and normalize input and output variables at the mean 
+dta <- dta %>%
+  mutate(ln_Y1 = log(vout1) - mean(log(vout1)),     
+         ln_Y2 = log(otout1) - mean(log(otout1)),
+         ln_x1 = log(feed) - mean(log(feed)),
+         ln_x2 = log(labo) - mean(log(labo)),
+         ln_x3 = log(Land) - mean(log(Land)),
+         ln_x4 = log(machi) - mean(log(machi)),
+         ln_x5 = log(ocapi) - mean(log(ocapi)) ) 
+
+#Impose linear homogeneity using land
+dta <- dta %>%
+  mutate(ln_x1_n = ln_x1 - ln_x3,   
+         ln_x2_n = ln_x2 - ln_x3,
+         ln_x4_n = ln_x4 - ln_x3,
+         ln_x5_n = ln_x5 - ln_x3)
+
+#Create new variables for estimation  
+dta <- dta %>%
+  mutate(y2009a = as.numeric( year >= 2009) ,  #create dummy for year 2009 and later
+         t_y2009a = time*y2009a)    #create interaction term
+
+#explanatory variables in equation (2)
+dta <- dta %>%
+  mutate(ln_Y11 = (ln_Y1^2),     
+         ln_Y22 = (ln_Y2^2),
+         ln_x11 = (ln_x1_n^2),   
+         ln_x22 = (ln_x2_n^2),
+         ln_x44 = (ln_x4_n^2),
+         ln_x55 = (ln_x5_n^2), 
+         ln_Y1Y2 = ln_Y1 * ln_Y2,
+         ln_Y1x1 = ln_Y1 * ln_x1_n,
+         ln_Y1x2 = ln_Y1 * ln_x2_n,
+         ln_Y1x4 = ln_Y1 * ln_x4_n,
+         ln_Y1x5 = ln_Y1 * ln_x5_n,
+         ln_Y2x1 = ln_Y2 * ln_x1_n,
+         ln_Y2x2 = ln_Y2 * ln_x2_n,
+         ln_Y2x4 = ln_Y2 * ln_x4_n,
+         ln_Y2x5 = ln_Y2 * ln_x5_n,
+         ln_x1x2 = ln_x1_n * ln_x2_n, 
+         ln_x1x4 = ln_x1_n * ln_x4_n,
+         ln_x1x5 = ln_x1_n * ln_x5_n,
+         ln_x2x4 = ln_x2_n * ln_x4_n,
+         ln_x2x5 = ln_x2_n * ln_x5_n,
+         ln_x4x5 = ln_x4_n * ln_x5_n)
+
+# dependent variable in equation (2)
+dta <- dta %>% mutate(Nln_x3 = - ln_x3) 
+
+colnames(dta)
+```
+
+Now, we need to estimate the equation (2) and (3) from the paper. Using the package "npsf", we can estimate the stochastic distance function, which is required for our replication. This package gives us a Maximum Likelihood Estimation (MLE) results. For farm-specific inefficiency, we use option for a conditional mean model with truncated normal distribution at zero ($\geq 0$). 
+As can be seen in the code, the symmetry property is directly imposed to the translog function, which approximates the input distance function. In other words, we estimate only the coefficient of $log(Y_{1})log(Y_{2})$ but not the coefficient of $log(Y_{2})log(Y_{1})$, since we assume they are same by symmetry. Also, as for the coefficient of squared terms (like $log(Y_{1})^{2}$), we need to consider only half of the value, when we interprete the level of such coefficients.
+
+We need to estimate three models. Model 1 is estimated without any time trends in the equation (2), but time is included in the equation (3). For Model 2, we include the linear time trend in equation (2) in the Model 2 but exclude it from the inefficiency component. The estimation results of these models are similar, which implies that the result is robust. In Model 3 we use dummies for each year instead of the dummy for 2009 and after ($D_{2009a}$) and the interaction term ($Time*D_{2009a}$) in the equation (3). Also, there is no time trend in the equation (2). 
+
+
+```{r model1, include=FALSE}
+library(npsf)
+
+eq2_1 <- Nln_x3 ~ ln_Y1 + ln_Y2 + ln_x1_n + ln_x2_n + ln_x4_n + ln_x5_n + ln_Y11 + ln_Y22 + ln_x11 + ln_x22 + ln_x44 + ln_x55 + ln_Y1Y2 + ln_Y1x1 + ln_Y1x2 + ln_Y1x4 + ln_Y1x5 + ln_Y2x1 + ln_Y2x2 + ln_Y2x4 + ln_Y2x5 + ln_x1x2 + ln_x1x4 + ln_x1x5 + ln_x2x4 + ln_x2x5 + ln_x4x5
+
+eq3_1 <- ~ Age + offwork + North + South + time + y2009a + t_y2009a  
+
+model1 <- sf(eq2_1, data=dta, distribution = c("t"), eff.time.invariant = FALSE,
+             mean.u.0i = eq3_1)
+
+summary(model1)
+
+coeff1 <- model1$table[1:28,1:1]
+coeff1 <- round(as.numeric(coeff1), 4)
+SD1<- model1$table[1:28,2:2]
+SD1 <- round(as.numeric(SD1), 4)
+total1 <- data.frame(coeff1, SD1)
+```
+
+
+```{r model2, include=FALSE}
+eq2_2 <- Nln_x3 ~ ln_Y1 + ln_Y2 + ln_x1_n + ln_x2_n + ln_x4_n + ln_x5_n + ln_Y11 + ln_Y22 + ln_x11 + ln_x22 + ln_x44 + ln_x55 + ln_Y1Y2 + ln_Y1x1 + ln_Y1x2 + ln_Y1x4 + ln_Y1x5 + ln_Y2x1 + ln_Y2x2 + ln_Y2x4 + ln_Y2x5 + ln_x1x2 + ln_x1x4 + ln_x1x5 + ln_x2x4 + ln_x2x5 + ln_x4x5 + time
+
+eq3_2 <- ~ Age + offwork + North + South + y2009a + t_y2009a  
+
+model2 <- sf(eq2_2, data=dta, distribution = "t", eff.time.invariant = FALSE,
+             mean.u.0i = eq3_2)
+
+summary(model2)
+coeff2 <- model2$table[1:28,1:1]
+coeff2 <- round(as.numeric(coeff2), 4)
+SD2<- model1$table[1:28,2:2]
+SD2 <- round(as.numeric(SD2), 4)
+total2 <- data.frame(coeff2, SD2)
+```
+
+
+```{r model3, include=FALSE}
+#create dummies for each year
+dta <- dta %>%
+  mutate(y2001 = as.numeric(year == 2001),
+         y2002 = as.numeric(year == 2002),
+         y2005 = as.numeric(year == 2005),  
+         y2006 = as.numeric(year == 2006),
+         y2007 = as.numeric(year == 2007),
+         y2008 = as.numeric(year == 2008),
+         y2009 = as.numeric(year == 2009),
+         y2010 = as.numeric(year == 2010)) 
+
+#estimate model3
+eq2_3 <- Nln_x3 ~ ln_Y1 + ln_Y2 + ln_x1_n + ln_x2_n + ln_x4_n + ln_x5_n + ln_Y11 + ln_Y22 + ln_x11 + ln_x22 + ln_x44 + ln_x55 + ln_Y1Y2 + ln_Y1x1 + ln_Y1x2 + ln_Y1x4 + ln_Y1x5 + ln_Y2x1 + ln_Y2x2 + ln_Y2x4 + ln_Y2x5 + ln_x1x2 + ln_x1x4 + ln_x1x5 + ln_x2x4 + ln_x2x5 + ln_x4x5
+
+eq3_3 <- ~ Age + offwork + North + South + y2005 + y2006 + y2007 + y2008 + y2009 + y2010  
+
+model3 <- sf(eq2_3, data=dta, distribution = "t", eff.time.invariant = FALSE,
+             mean.u.0i = eq3_3)
+
+summary(model3)
+
+```
+
+```{r A1, include=FALSE}
+#extract coefficients of input distance model, ll and sigma_u2 of each model
+table_1 <- model1$table
+
+ll_1 <- model1$loglik
+
+
+sigmau2_1 <- (model1$table[40,1])^2
+sigmau2_1 <- round(as.numeric(sigmau2_1), 4)
+sigmau2_2 <- (model2$table[40,1])^2
+sigmau2_2 <- round(as.numeric(sigmau2_2), 4)
+Sigma_u <- data.frame(sigmau2_1, sigmau2_2)
+sigma_name<- c("Sigma_u2")
+sigma_total<-cbind(Variables=sigma_name, Model1=sigmau2_1, Model2=sigmau2_2)
+
+#reproduce table A1 
+
+v_names<- c("_Cons","Y1","Y2","X1","X2","x4","x5","Y1^2","Y2^2","x1^2", "x2^2","x4^2","x5^2","Y1Y2","Y1x1","Y1x2","Y1x4","Y1x5","Y2x1","Y2x2","Y2x4","Y1x5", "x1x2","x1x4","x1x5","x2x4","x2x5","x4x5")
+```
+
+```{r, echo=FALSE}
+v_total <- cbind(Varibles= v_names, Model1=total1, Model2=total2)
+kable(v_total, format = "latex", caption = "Table A1. Stochastic input distance function parameters ", booktabs = T) %>% 
+   kable_styling(latex_options = "striped")
+
+kable(sigma_total, format = "latex", caption = "Variance of the inefficiency term ", booktabs = T) %>% 
+   kable_styling(latex_options = "striped")
+
+```
+
+
+
+## Question 3
+
+In this question we need to calculate the average efficiencies for 3 periods (2001-2008, 2009, and 2010) across all 3 models. Also, we need to find the maximum and minimum efficiency scores for each finding. The results have to coincide with the 3 bottom rows in Table 3 of the replicated paper. The package "npsf" that we used above gives us the technical efficiencies which we need, but we should extract them by ourselves. After this, we get the matrices for each model, which consist of 6 columns: Lower and Upper bounds, year, Mode, BC, and JLMS. For average efficiency calculation, we use column "BC", which stands for cost efficiencies of Battese and Coelli (1988). However, the values for each row in these columns are almost the same (we exclude column "year" here), so we could also use cost efficiencies by Jondrow et al. (1982) - column "JLMS".
+
+```{r efficiency, include= FALSE}
+
+eff_1 <- model1$efficiencies 
+eff_1 <- eff_1 %>% mutate(year = dta$year)
+eff_1.2001_2008 <- eff_1[ which(eff_1$year<=2008),]
+eff_1.2009 <- eff_1[ which(eff_1$year==2009),]
+eff_1.2010 <- eff_1[ which(eff_1$year==2010),]
+
+eff_2 <- model2$efficiencies 
+eff_2 <- eff_2 %>% mutate(year = dta$year)
+eff_2.2001_2008 <- eff_2[ which(eff_2$year<=2008),]
+eff_2.2009 <- eff_2[ which(eff_2$year==2009),]
+eff_2.2010 <- eff_2[ which(eff_2$year==2010),]
+
+eff_3 <- model3$efficiencies 
+eff_3 <- eff_3 %>% mutate(year = dta$year)
+eff_3.2001_2008 <- eff_3[ which(eff_3$year<=2008),]
+eff_3.2009 <- eff_3[ which(eff_3$year==2009),]
+eff_3.2010 <- eff_3[ which(eff_3$year==2010),]
+
+# Calculation of the averages, maximum and minimum values. Here, we are using column BC, which stands for cost efficiencies (exp(-u)|e) of Battese and Coelli (1988). However, other columns in the matrix have almost the same values, so we could also use cost efficiencies by Jondrow et al. (1982) - column JLMS.
+
+#Averages
+ave.eff_1.2001_2008 <- mean (eff_1.2001_2008$BC)
+ave.eff_1.2009 <- mean (eff_1.2009$BC)
+ave.eff_1.2010 <- mean (eff_1.2010$BC)
+ave.eff_2.2001_2008 <- mean (eff_2.2001_2008$BC)
+ave.eff_2.2009 <- mean (eff_2.2009$BC)
+ave.eff_2.2010 <- mean (eff_2.2010$BC)
+ave.eff_3.2001_2008 <- mean (eff_3.2001_2008$BC)
+ave.eff_3.2009 <- mean (eff_3.2009$BC)
+ave.eff_3.2010 <- mean (eff_3.2010$BC)
+
+#Maximum
+max.eff_1.2001_2008 <- max (eff_1.2001_2008$BC)
+max.eff_1.2009 <- max (eff_1.2009$BC)
+max.eff_1.2010 <- max (eff_1.2010$BC)
+max.eff_2.2001_2008 <- max (eff_2.2001_2008$BC)
+max.eff_2.2009 <- max (eff_2.2009$BC)
+max.eff_2.2010 <- max (eff_2.2010$BC)
+max.eff_3.2001_2008 <- max (eff_3.2001_2008$BC)
+max.eff_3.2009 <- max (eff_3.2009$BC)
+max.eff_3.2010 <- max (eff_3.2010$BC)
+
+#Minimum
+min.eff_1.2001_2008 <- min (eff_1.2001_2008$BC)
+min.eff_1.2009 <- min (eff_1.2009$BC)
+min.eff_1.2010 <- min (eff_1.2010$BC)
+min.eff_2.2001_2008 <- min (eff_2.2001_2008$BC)
+min.eff_2.2009 <- min (eff_2.2009$BC)
+min.eff_2.2010 <- min (eff_2.2010$BC)
+min.eff_3.2001_2008 <- min (eff_3.2001_2008$BC)
+min.eff_3.2009 <- min (eff_3.2009$BC)
+min.eff_3.2010 <- min (eff_3.2010$BC)
+
+eff_table<-matrix(NA,nrow=9,ncol=3)
+colnames(eff_table) <- c("Minimum","Average efficiency", "Maximum")
+rownames(eff_table) <- c("Model_1.2001-2008","Model_1.2009", "Model_1.2010","Model_2.2001-2008","Model_2.2009", "Model_2.2010","Model_3.2001-2008","Model_3.2009", "Model_3.2010")
+eff_table["Model_1.2001-2008","Minimum"] <- min.eff_1.2001_2008
+eff_table["Model_1.2001-2008","Average efficiency"] <- ave.eff_1.2001_2008
+eff_table["Model_1.2001-2008","Maximum"] <- max.eff_1.2001_2008
+eff_table["Model_2.2001-2008","Minimum"] <- min.eff_2.2001_2008
+eff_table["Model_2.2001-2008","Average efficiency"] <- ave.eff_2.2001_2008
+eff_table["Model_2.2001-2008","Maximum"] <- max.eff_2.2001_2008
+eff_table["Model_3.2001-2008","Minimum"] <- min.eff_3.2001_2008
+eff_table["Model_3.2001-2008","Average efficiency"] <- ave.eff_3.2001_2008
+eff_table["Model_3.2001-2008","Maximum"] <- max.eff_3.2001_2008
+eff_table["Model_1.2009","Minimum"] <- min.eff_1.2009
+eff_table["Model_1.2009","Average efficiency"] <- ave.eff_1.2009
+eff_table["Model_1.2009","Maximum"] <- max.eff_1.2009
+eff_table["Model_2.2009","Minimum"] <- min.eff_2.2009
+eff_table["Model_2.2009","Average efficiency"] <- ave.eff_2.2009
+eff_table["Model_2.2009","Maximum"] <- max.eff_2.2009
+eff_table["Model_3.2009","Minimum"] <- min.eff_3.2009
+eff_table["Model_3.2009","Average efficiency"] <- ave.eff_3.2009
+eff_table["Model_3.2009","Maximum"] <- max.eff_3.2009
+eff_table["Model_1.2010","Minimum"] <- min.eff_1.2010
+eff_table["Model_1.2010","Average efficiency"] <- ave.eff_1.2010
+eff_table["Model_1.2010","Maximum"] <- max.eff_1.2010
+eff_table["Model_2.2010","Minimum"] <- min.eff_2.2010
+eff_table["Model_2.2010","Average efficiency"] <- ave.eff_2.2010
+eff_table["Model_2.2010","Maximum"] <- max.eff_2.2010
+eff_table["Model_3.2010","Minimum"] <- min.eff_3.2010
+eff_table["Model_3.2010","Average efficiency"] <- ave.eff_3.2010
+eff_table["Model_3.2010","Maximum"] <- max.eff_3.2010
+print(eff_table, digits=4)
+```
+
+
+```{r eff_table_nice, echo = FALSE, results='asis', message = FALSE}
+p_load(stargazer)
+stargazer(eff_table, summary = FALSE,  header =FALSE, title = "Average Technical Efficiency" ,digits = 4 )
+```
+
+
+
+
+

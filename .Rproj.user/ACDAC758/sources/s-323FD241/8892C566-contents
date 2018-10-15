@@ -1,0 +1,276 @@
+---
+title: "Econ 641 - Assigment 2"
+author:
+- Oranuch Wongpiyabovorn
+- Kunwon Ahn
+- Jun Yeong Lee
+institute : Iowa State University
+date: \today
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 6
+    number_sections : no
+  html_document: default
+  word_document: default
+header-includes:
+    - \usepackage{booktabs}
+    - \usepackage[table, dvipsnames]{xcolor}
+    - \clubpenalty=10000 #The next 3 lines are to avoid widows and orphans
+    - \widowpenalty=10000
+    - \displaywidowpenalty=10000
+fontsize: 11pt
+geometry: margin=1in
+documentclass: article
+urlcolor: blue
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, include = TRUE, message = FALSE, warning = FALSE, tidy = TRUE, tidy.opts=list(blank=FALSE, width.cutoff=40), collapse = TRUE, fig.pos = 'phtb')
+
+#Load some packages
+library(pacman)
+pacman::p_load(tidyverse)
+pacman::p_load(readxl)
+pacman::p_load(xlsx, readxl)
+pacman::p_load(magrittr)
+pacman::p_load(haven)
+pacman::p_load(viridis)
+pacman::p_load(Cairo)
+options(kableExtra.latex.load_packages = FALSE)
+pacman::p_load(kableExtra)
+```
+
+##Question 1
+```{r table 2, include=FALSE}
+dta = suppressWarnings(read_excel("Raw data.xlsx", skip = 0, col_types = "numeric"))
+
+table2 <- array(NA, c(11,4))
+rownames(table2) <- c("Labor", "Feed", "Machinery", "Other capital", "Dairy output", "Other output", "Land", "Age", "North", "South", "Off-farm work")
+colnames(table2) <- c("Units","Mean","P50", "SD")
+table2["Labor","Units"] <- "Full time equivalent"
+table2["Labor","Mean"] <- mean(dta$labo)
+table2["Labor","P50"] <-median(dta$labo)
+table2["Labor","SD"] <-sd(dta$labo)
+table2["Feed","Units"] <- "$"
+table2["Feed","Mean"] <- mean(dta$feed)
+table2["Feed","P50"] <- median(dta$feed)
+table2["Feed","SD"] <- sd(dta$feed)
+table2["Machinery","Units"] <-"$"
+table2["Machinery","Mean"] <- mean(dta$machi)
+table2["Machinery","P50"] <- median(dta$machi)
+table2["Machinery","SD"] <- sd(dta$machi)
+table2["Other capital","Units"] <-"$"
+table2["Other capital","Mean"] <-mean(dta$ocapi)
+table2["Other capital","P50"] <-median(dta$ocapi)
+table2["Other capital","SD"] <- sd(dta$ocapi)
+table2["Dairy output","Units"] <-"$"
+table2["Dairy output","Mean"] <-mean(dta$vout1)
+table2["Dairy output","P50"] <-median(dta$vout1)
+table2["Dairy output","SD"] <- sd(dta$vout1)
+table2["Other output","Units"] <-"$"
+table2["Other output","Mean"] <-mean(dta$otout1)
+table2["Other output","P50"] <-median(dta$otout1)
+table2["Other output","SD"] <- sd(dta$otout1)
+table2["Land","Units"] <- "Ha"
+table2["Land","Mean"] <-mean(dta$land)
+table2["Land","P50"] <-median(dta$land)
+table2["Land","SD"] <- sd(dta$land)
+table2["Age","Units"] <- "Years"
+table2["Age","Mean"] <-mean(dta$age)
+table2["Age","P50"] <-median(dta$age)
+table2["Age","SD"] <- sd(dta$age)
+table2["North","Units"] <- "Binary"
+table2["North","Mean"] <-mean(dta$north)
+table2["North","P50"] <-median(dta$north)
+table2["North","SD"] <- sd(dta$north)
+table2["South","Units"] <- "Binary"
+table2["South","Mean"] <-mean(dta$south)
+table2["South","P50"] <-median(dta$south)
+table2["South","SD"] <- sd(dta$south)
+table2["Off-farm work","Units"] <- "Binary"
+table2["Off-farm work","Mean"] <-mean(dta$offwork)
+table2["Off-farm work","P50"] <-median(dta$offwork)
+table2["Off-farm work","SD"] <- sd(dta$offwork)
+print(table2, digits= 3)
+
+mat2 <- matrix(table2,ncol=4)
+dimnames(mat2) <- list(c("Labor", "Feed", "Machinery", "Other capital", "Dairy output", "Other output", "Land", "Age", "North", "South", "Off-farm work"),c("Units","Mean","P50", "SD"))
+mat2[,2] <- round(as.numeric(mat2[,2]),digits=2)
+mat2[,3] <- round(as.numeric(mat2[,3]),digits=2)
+mat2[,4] <- round(as.numeric(mat2[,4]),digits=2)
+
+mat2[2,-1] <- round(as.numeric(mat2[2,-1]), digits=0)
+mat2[3,-1] <- round(as.numeric(mat2[3,-1]), digits=0)
+mat2[4,-1] <- round(as.numeric(mat2[4,-1]), digits=0)
+mat2[5,-1] <- round(as.numeric(mat2[5,-1]), digits=0)
+mat2[6,-1] <- round(as.numeric(mat2[6,-1]), digits=0)
+```
+
+
+```{r table2_nice, echo = FALSE, results='asis', message = FALSE}
+p_load(stargazer)
+stargazer(mat2, summary = FALSE, title="Summary of selected variables (number of observations, N = 549)", header =FALSE  )
+```
+We replicate the Table 2[Summary of selected variables (number of observations, N = 549)] of the original paper as shown in table 1. It is straight foward to build summary table by getting the numbers of average, median, and standard deviation from the data and we get the exactly same numbers of those.
+
+\break 
+
+
+
+##Question 2 & 3
+
+In order to replicate the Table 3[Stochastic distance functions estimation-Technical inefficiency parameters] and Table A.1(Stochastic input distance function parameters), We used function 'sf' in 'npsf' package of R program which stands for Nonparametric and Stochastic Efficiency and Productivity Analysis. The function 'sf' could perform maximum likelihood estimation for parametric stochastic frontier models, which is what we need to run.  Then we coded the translog production function as equation (2) in the paper that the technological frontier and stochastic components are related, excluding quadratic time trend as well as trend-input and trend-output interaction terms.  Linear time trend was included in the distance function for model 1 and 3, while it was included in the inefficiency decomposition equation instead for model 2.  Following the definition of variables, we created dummy variables for year as in the paper.  In order to impose linear homogeneity inputs, we normalized inputs in the distance function by deviding by one of the inputs, which is the land input.  Prior to estimation, we took log for all input and output variables and also normalized them at their geometric mean for rescaling by subtracting them by the average of thier own log variables.  On top of that, as paper provides, to test for the hypothesized inefficiency pattern, we specified the farm-specific inefficiency term in the model.  Thanks to the hint, we used "set.seed(533573)" to make sure the convergence in model 2 coincide with the result by using STATA.  
+
+For question 2, we get the same figures for parameters of Table A.1 in the original paper which are shown in the Table 3(Model1 A1) and 5(Model2 A1) in here. However, for the model3, we found some slight differences in parameter estimates.  We conjecture that the dummy variables have affected the result since differences are only found in year dummy variables from 2008 to 2010.  In particular, for 2010, the sign of estiamates is opposite and the magnitude is far different while others are similar.  As mentioned in class that there might be some mistakes in creating year dummies in the original paper, we decided to use year dummies for only those year, for example, d2009 denotes only year 2009 while d2009a is a dummy for year 2009 onwards.  Furthermore, we found that the coefficient for d2010 would be the same as in the paper if we use d2009a instead of d2009.
+
+For question 3, after estimation, we predicted efficiencies for each model and then divided them into three groups based on year as in the paper.  Compared to Table 3 in the original paper, we got similar result of average, minimum, and maximum estimated efficiencies for model 1 and 2.  However, the magnitude of predicted efficiences for model are slightly different, for instance, the average efficiency in 2010 shows 0.6511 in the paper while our estimation shows 0.6509. It is not surprising since the results of model 3 provides different coefficients, compared to the original model. 
+
+
+\break 
+
+```{r a1, include=FALSE}
+library(dplyr)
+dta<- dta %>% mutate(d2009a = as.numeric(year==2009 |year==2010), 
+                     d2005=as.numeric(year==2005), 
+                     d2006=as.numeric(year==2006), 
+                     d2007=as.numeric(year==2007), 
+                     d2008=as.numeric(year==2008), 
+                     d2009=as.numeric(year==2009), 
+                     d2010= as.numeric(year==2010),
+                     nlland= -(log(land) - mean(log(land))),
+                     lland = log(land) - mean(log(land)),
+                     lvout = log(vout1) - mean(log(vout1)), 
+                     lotout = log(otout1) - mean(log(otout1)), 
+                     lfeed_land = log(feed) - mean(log(feed)) - lland, 
+                     llabo_land = log(labo) - mean(log(labo)) - lland, 
+                     lmachi_land = log(machi) - mean(log(machi)) - lland, 
+                     locapi_land = log(ocapi) - mean(log(ocapi)) - lland, 
+                     lvout2 = lvout^2, 
+                     lotout2 = lotout^2, 
+                     lfeed2 = lfeed_land^2, 
+                     llabo2 = llabo_land^2, 
+                     lmachi2 = lmachi_land^2 , 
+                     locapi2 = locapi_land^2, 
+                     lvout_otout = lvout*lotout,
+                     lvout_feed = lvout*lfeed_land , 
+                     lvout_labo = lvout*llabo_land,  
+                     lvout_machi = lvout*lmachi_land, 
+                     lvout_ocapi = lvout*locapi_land , 
+                     lotout_feed = lotout*lfeed_land, 
+                     lotout_labo = lotout*llabo_land, 
+                     lotout_machi = lotout*lmachi_land, 
+                     lotout_ocapi = lotout*locapi_land, 
+                     lfeed_labo = lfeed_land*llabo_land, 
+                     lfeed_machi = lfeed_land*lmachi_land , 
+                     lfeed_ocapi = lfeed_land*locapi_land, 
+                     llabo_machi = llabo_land*lmachi_land,  
+                     llabo_ocapi = llabo_land*locapi_land, 
+                     lmachi_ocapi = lmachi_land*locapi_land, 
+                     td2009a =time*d2009a )
+
+library(npsf)
+
+model <- sf(nlland ~ lvout +lotout + lfeed_land + llabo_land + lmachi_land + locapi_land + lvout2 + lotout2 + lfeed2 + llabo2 + lmachi2 + locapi2 + lvout_otout + lvout_feed + lvout_labo + lvout_machi + lvout_ocapi + lotout_feed + lotout_labo + lotout_machi + lotout_ocapi + lfeed_labo + lfeed_machi + lfeed_ocapi + llabo_machi + llabo_ocapi + lmachi_ocapi, 
+           data=dta, 
+           distribution="t", 
+           mean.u.0i=  ~ age + offwork +north + south +time + d2009a + td2009a, 
+           eff.time.invariant = FALSE)
+
+set.seed(533573)
+model2<-sf(nlland ~ lvout +lotout + lfeed_land + llabo_land + lmachi_land + locapi_land + lvout2 + lotout2 + lfeed2 + llabo2 + lmachi2 + locapi2 + lvout_otout + lvout_feed + lvout_labo + lvout_machi + lvout_ocapi + lotout_feed + lotout_labo + lotout_machi + lotout_ocapi + lfeed_labo + lfeed_machi + lfeed_ocapi + llabo_machi + llabo_ocapi + lmachi_ocapi + time, 
+           data=dta, 
+           distribution="t", 
+           mean.u.0i=  ~ age + offwork +north + south +d2009a + td2009a, 
+           eff.time.invariant = FALSE)
+
+model3<-sf(nlland ~ lvout +lotout + lfeed_land + llabo_land + lmachi_land + locapi_land + lvout2 + lotout2 + lfeed2 + llabo2 + lmachi2 + locapi2 + lvout_otout + lvout_feed + lvout_labo + lvout_machi + lvout_ocapi + lotout_feed + lotout_labo + lotout_machi + lotout_ocapi + lfeed_labo + lfeed_machi + lfeed_ocapi + llabo_machi + llabo_ocapi + lmachi_ocapi, 
+           data=dta, 
+           distribution="t", 
+           mean.u.0i=  ~ age + offwork +north + south +d2005 +d2006 +d2007 +d2008+d2009+d2010, 
+           eff.time.invariant = FALSE)
+```
+
+
+
+```{r tablee, results='asis', echo = FALSE}
+kable(model$table[31:38,] ,format = "latex",
+      caption="Model 1 (The inefficiency decomposition function)",
+      digits=4)
+
+kable(model$table[1:25,] ,format = "latex",
+      caption="Model 1 A1 (The frontier function)",
+      digits=4)
+
+kable(model2$table[32:38,] ,format = "latex",
+      caption="Model 2 (The inefficiency decomposition function)",
+      digits=4)
+
+kable(model2$table[1:29,] ,format = "latex",
+      caption="Model 2 A1 (The frontier function)",
+      digits=4)
+
+kable(model3$table[31:41,] ,format = "latex",
+      caption="Model 3 (The inefficiency decomposition function)",
+      digits=4)
+
+```
+
+
+```{r efficiencies, include= FALSE}
+eff1 <- model$efficiencies 
+eff1 <- eff1 %>% mutate(year = dta$year)
+eff1_18 <- eff1[ which(eff1$year<=2008),]
+eff1_09 <- eff1[ which(eff1$year==2009),]
+eff1_10 <- eff1[ which(eff1$year==2010),]
+
+eff2 <- model2$efficiencies 
+eff2 <- eff2 %>% mutate(year = dta$year)
+eff2_18 <- eff2[ which(eff2$year<=2008),]
+eff2_09 <- eff2[ which(eff2$year==2009),]
+eff2_10 <- eff2[ which(eff2$year==2010),]
+
+eff3 <- model3$efficiencies 
+eff3 <- eff3 %>% mutate(year = dta$year)
+eff3_18 <- eff3[ which(eff3$year<=2008),]
+eff3_09 <- eff3[ which(eff3$year==2009),]
+eff3_10 <- eff3[ which(eff3$year==2010),]
+
+table3e <- array(NA, c(9,3))
+rownames(table3e) <- c("Model 1 (2001-08)","Model 1 (2009)", "Model 1 (2010)","Model 2 (2001-08)","Model 2 (2009)", "Model 2 (2010)","Model 3 (2001-08)","Model 3 (2009)", "Model 3 (2010)")
+colnames(table3e) <- c("Ave. eff.","Min","Max")
+table3e["Model 1 (2001-08)","Ave. eff."] <- mean(eff1_18$BC)
+table3e["Model 1 (2001-08)","Max"] <- max(eff1_18$BC)
+table3e["Model 1 (2001-08)","Min"] <- min(eff1_18$BC)
+table3e["Model 1 (2009)","Ave. eff."] <- mean(eff1_09$BC)
+table3e["Model 1 (2009)","Max"] <- max(eff1_09$BC)
+table3e["Model 1 (2009)","Min"] <- min(eff1_09$BC)
+table3e["Model 1 (2010)","Ave. eff."] <- mean(eff1_10$BC)
+table3e["Model 1 (2010)","Max"] <- max(eff1_10$BC)
+table3e["Model 1 (2010)","Min"] <- min(eff1_10$BC)
+table3e["Model 2 (2001-08)","Ave. eff."] <- mean(eff2_18$BC)
+table3e["Model 2 (2001-08)","Max"] <- max(eff2_18$BC)
+table3e["Model 2 (2001-08)","Min"] <- min(eff2_18$BC)
+table3e["Model 2 (2009)","Ave. eff."] <- mean(eff2_09$BC)
+table3e["Model 2 (2009)","Max"] <- max(eff2_09$BC)
+table3e["Model 2 (2009)","Min"] <- min(eff2_09$BC)
+table3e["Model 2 (2010)","Ave. eff."] <- mean(eff2_10$BC)
+table3e["Model 2 (2010)","Max"] <- max(eff2_10$BC)
+table3e["Model 2 (2010)","Min"] <- min(eff2_10$BC)
+table3e["Model 3 (2001-08)","Ave. eff."] <- mean(eff3_18$BC)
+table3e["Model 3 (2001-08)","Max"] <- max(eff3_18$BC)
+table3e["Model 3 (2001-08)","Min"] <- min(eff3_18$BC)
+table3e["Model 3 (2009)","Ave. eff."] <- mean(eff3_09$BC)
+table3e["Model 3 (2009)","Max"] <- max(eff3_09$BC)
+table3e["Model 3 (2009)","Min"] <- min(eff3_09$BC)
+table3e["Model 3 (2010)","Ave. eff."] <- mean(eff3_10$BC)
+table3e["Model 3 (2010)","Max"] <- max(eff3_10$BC)
+table3e["Model 3 (2010)","Min"] <- min(eff3_10$BC)
+print(table3e, digits=4)
+```
+
+```{r table22_nice, echo = FALSE, results='asis', message = FALSE}
+p_load(stargazer)
+stargazer(table3e, summary = FALSE,  header =FALSE, title = "Summary of the estimated efficiencies" ,digits = 4 )
+```
+
